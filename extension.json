@@ -36,7 +36,8 @@
 		}
 	},
 	"JobClasses": {
-		"renameUser": "RenameUserJob"
+		"renameUser": "RenameUserJob",
+		"RenameUserEachWikiJob": "RenameUserEachWikiJob"
 	},
 	"GroupPermissions": {
 		"bureaucrat": {
@@ -69,6 +70,7 @@
 		"RenameuserHookRunner": "includes/RenameuserHookRunner.php",
 		"RenameuserHooks": "includes/RenameuserHooks.php",
 		"RenameUserJob": "includes/RenameUserJob.php",
+		"RenameUserEachWikiJob": "includes/RenameUserEachWikiJob.php",
 		"RenameuserLogFormatter": "includes/RenameuserLogFormatter.php",
 		"RenameUserPreRenameHook": "includes/Hook/RenameUserPreRenameHook.php",
 		"RenameUserCompleteHook": "includes/Hook/RenameUserCompleteHook.php",

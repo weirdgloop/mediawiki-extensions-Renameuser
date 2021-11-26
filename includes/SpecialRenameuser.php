@@ -72,6 +72,8 @@ class SpecialRenameuser extends SpecialPage {
 	 * @throws UserBlockedError
 	 */
 	public function execute( $par ) {
+		global $wgLocalDatabases;
+
 		$this->setHeaders();
 		$this->addHelpLink( 'Help:Renameuser' );
 
@@ -83,6 +85,11 @@ class SpecialRenameuser extends SpecialPage {
 		$block = $user->getBlock();
 		if ( $block ) {
 			throw new UserBlockedError( $block );
+		}
+
+		if ( empty( $wgLocalDatabases ) ) {
+			throw new ErrorPageError( 'renameuser', 'renameuser-error-nolocaldatabases' );
+			return;
 		}
 
 		$out = $this->getOutput();
@@ -331,7 +338,11 @@ class SpecialRenameuser extends SpecialPage {
 			$newusername->getText(),
 			$uid,
 			$this->getUser(),
-			[ 'reason' => $reason ]
+			[
+				'reason' => $reason,
+				'movepages' => $request->getCheck( 'movepages' ) && $this->permissionManager->userHasRight( $user, 'move' ),
+				'suppressredirects' => $request->getCheck( 'suppressredirect' ) && $this->permissionManager->userHasRight( $user, 'suppressredirect' )
+			]
 		);
 		if ( !$rename->rename() ) {
 			return;
@@ -339,93 +350,9 @@ class SpecialRenameuser extends SpecialPage {
 
 		// If this user is renaming his/herself, make sure that MovePage::move()
 		// doesn't make a bunch of null move edits under the old name!
-		if ( $user->getId() === $uid ) {
-			$user->setName( $newusername->getText() );
-		}
-
-		// Move any user pages
-		if ( $request->getCheck( 'movepages' )
-			&& $this->permissionManager->userHasRight( $user, 'move' ) ) {
-			$dbr = wfGetDB( DB_REPLICA );
-
-			$pages = $dbr->select(
-				'page',
-				[ 'page_namespace', 'page_title' ],
-				[
-					'page_namespace' => [ NS_USER, NS_USER_TALK ],
-					$dbr->makeList( [
-						'page_title ' . $dbr->buildLike( $oldusername->getDBkey() . '/', $dbr->anyString() ),
-						'page_title = ' . $dbr->addQuotes( $oldusername->getDBkey() ),
-					], LIST_OR ),
-				],
-				__METHOD__
-			);
-
-			$suppressRedirect = false;
-
-			if ( $request->getCheck( 'suppressredirect' )
-				&& $this->permissionManager->userHasRight( $user, 'suppressredirect' ) ) {
-				$suppressRedirect = true;
-			}
-
-			$output = '';
-			$linkRenderer = $this->getLinkRenderer();
-			foreach ( $pages as $row ) {
-				$oldPage = $this->titleFactory->makeTitle( $row->page_namespace, $row->page_title );
-
-				$newPageTitle = preg_replace( '!^[^/]+!', $newusername->getDBkey(), $row->page_title );
-				$newPage = $this->titleFactory->makeTitleSafe( $row->page_namespace, $newPageTitle );
-
-				if ( !$newPage ) {
-					throw new Exception(
-						"Encountered an invalid page title $newPageTitle in namespace $row->page_namespace"
-					);
-				}
-
-				$movePage = $this->movePageFactory->newMovePage( $oldPage, $newPage );
-				$validMoveStatus = $movePage->isValidMove();
-
-				# Do not autodelete or anything, title must not exist
-				if ( $newPage->exists() && !$validMoveStatus->isOK() ) {
-					$link = $linkRenderer->makeKnownLink( $newPage );
-					$output .= Html::rawElement(
-						'li',
-						[ 'class' => 'mw-renameuser-pe' ],
-						$this->msg( 'renameuser-page-exists' )->rawParams( $link )->escaped()
-					);
-				} else {
-					$logReason = $this->msg(
-						'renameuser-move-log', $oldusername->getText(), $newusername->getText()
-					)->inContentLanguage()->text();
-
-					$moveStatus = $movePage->move( $user, $logReason, !$suppressRedirect );
-
-					if ( $moveStatus->isOK() ) {
-						# oldPage is not known in case of redirect suppression
-						$oldLink = $linkRenderer->makeLink( $oldPage, null, [], [ 'redirect' => 'no' ] );
-
-						# newPage is always known because the move was successful
-						$newLink = $linkRenderer->makeKnownLink( $newPage );
-
-						$output .= Html::rawElement(
-							'li',
-							[ 'class' => 'mw-renameuser-pm' ],
-							$this->msg( 'renameuser-page-moved' )->rawParams( $oldLink, $newLink )->escaped()
-						);
-					} else {
-						$oldLink = $linkRenderer->makeKnownLink( $oldPage );
-						$newLink = $linkRenderer->makeLink( $newPage );
-						$output .= Html::rawElement(
-							'li', [ 'class' => 'mw-renameuser-pu' ],
-							$this->msg( 'renameuser-page-unmoved' )->rawParams( $oldLink, $newLink )->escaped()
-						);
-					}
-				}
-			}
-			if ( $output ) {
-				$out->addHTML( Html::rawElement( 'ul', [], $output ) );
-			}
-		}
+		// if ( $user->getId() === $uid ) {
+		// 	$user->setName( $newusername->getText() );
+		// }
 
 		// Output success message stuff :)
 		$out->wrapWikiMsg( "<div class=\"successbox\">$1</div><br style=\"clear:both\" />",
