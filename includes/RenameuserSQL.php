@@ -318,7 +318,9 @@ class RenameuserSQL {
 		$logid = $logEntry->insert();
 		// Include the log_id in the jobs as a DB commit marker
 		foreach ( $jobs as $job ) {
-			$job->params['logId'] = $logid;
+			if ( isset( $job['params'] ) ) {
+				$job->params['logId'] = $logid;
+			}
 		}
 
 		// Insert any jobs as needed. If this fails, then an exception will be thrown and the
