@@ -301,13 +301,14 @@ class RenameuserSQL {
 
 		// If this user is renaming his/herself, make sure that MovePage::move()
 		// doesn't make a bunch of null move edits under the old name!
-		if ( $user->getId() === $this->uid ) {
+		if ( $this->renamer->getId() === $this->uid ) {
 			$user->setName( $this->new );
+			$this->renamer->setName( $this->new );
 		}
 
 		// Log it!
 		$logEntry = new ManualLogEntry( 'renameuser', 'renameuser' );
-		$logEntry->setPerformer( $user );
+		$logEntry->setPerformer( $this->renamer );
 		$logEntry->setTarget( $oldTitle );
 		$logEntry->setComment( $this->reason );
 		$logEntry->setParameters( [

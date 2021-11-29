@@ -337,7 +337,7 @@ class SpecialRenameuser extends SpecialPage {
 			$oldusername->getText(),
 			$newusername->getText(),
 			$uid,
-			$this->getUser(),
+			$user,
 			[
 				'reason' => $reason,
 				'movepages' => $request->getCheck( 'movepages' ) && $this->permissionManager->userHasRight( $user, 'move' ),
