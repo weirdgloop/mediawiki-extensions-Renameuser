@@ -103,8 +103,6 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob {
 							$fields['where'],
 							__METHOD__
 						);
-
-						$lbFactory->waitForReplication();
 					} catch ( Exception $e ) {
 						$this->setLastError( get_class( $e ) . ': ' . $e->getMessage() );
 
@@ -145,9 +143,10 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob {
 				$newPage = $titleFactory->makeTitleSafe( $row->page_namespace, $newPageTitle );
 
 				if ( !$newPage ) {
-					throw new Exception(
-						"Encountered an invalid page title $newPageTitle in namespace $row->page_namespace"
-					);
+					// throw new Exception(
+					// 	"Encountered an invalid page title $newPageTitle in namespace $row->page_namespace"
+					// );
+					continue
 				}
 
 				$movePage = $movePageFactory->newMovePage( $oldPage, $newPage );
