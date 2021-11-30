@@ -192,6 +192,10 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 		if ($this->movePages) {
 			wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Starting to move pages for RenameUser");
 			$user = User::newSystemUser('Weird Gloop', ['steal' => true]);
+			if (!$user) {
+				$this->setLastError("Could not acquire required system user");
+				return false;
+			}
 			$dbr = wfGetDB(DB_REPLICA);
 
 			$pages = $dbr->select(
