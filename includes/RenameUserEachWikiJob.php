@@ -172,7 +172,6 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 			wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Starting table update for " . $key);
 			if ($dbw->tableExists($key, __METHOD__)) {
 				foreach ($value as $name => $fields) {
-					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Looping through " . $name);
 					try {
 						$dbw->update(
 							$key,
@@ -181,7 +180,6 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 							__METHOD__
 						);
 					} catch (Exception $e) {
-						wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Exception for dbw->update: $e->getMessage()");
 						$this->setLastError(get_class($e) . ': ' . $e->getMessage());
 
 						continue;
@@ -196,7 +194,6 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 			$user = User::newSystemUser('Weird Gloop', ['steal' => true]);
 			$dbr = wfGetDB(DB_REPLICA);
 
-			wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Doing select query");
 			$pages = $dbr->select(
 				'page',
 				['page_namespace', 'page_title'],
@@ -209,7 +206,6 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 				],
 				__METHOD__
 			);
-			wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Finished select query");
 
 			$suppressRedirect = false;
 
@@ -231,7 +227,6 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 					continue;
 				}
 
-				wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Creating new move page");
 				$movePage = $movePageFactory->newMovePage($oldPage, $newPage);
 				$validMoveStatus = $movePage->isValidMove();
 				$logReason = wfMessage(
@@ -240,19 +235,16 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 					$newTitle->getText()
 				)->inContentLanguage()->text();
 
-				wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Checking if the page exists and stuff");
 				if ($newPage->exists() && !$validMoveStatus->isOK()) {
 					// Could not move
-					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Page exists already and can't move: $row->page_title");
 				} else {
-					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Actually starting the move for $row->page_title");
 					$moveStatus = $movePage->move($user, $logReason, !$suppressRedirect);
 					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Finished the move with status $moveStatus for $row->page_title");
 				}
 			}
 		}
 
-		wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": COMPLETELY DONE!!!");
+		wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Completely done renaming $this->oldName to $this->newName");
 
 		return true;
 	}
