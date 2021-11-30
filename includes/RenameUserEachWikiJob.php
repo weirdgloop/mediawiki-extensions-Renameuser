@@ -243,14 +243,16 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 				wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Checking if the page exists and stuff");
 				if ($newPage->exists() && !$validMoveStatus->isOK()) {
 					// Could not move
+					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Page exists already and can't move: $row->page_title");
 				} else {
 					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Actually starting the move for $row->page_title");
 					$moveStatus = $movePage->move($user, $logReason, !$suppressRedirect);
-					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Finished the move for $row->page_title");
+					wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": Finished the move with status $moveStatus for $row->page_title");
 				}
 			}
 		}
 
+		wfDebug(__METHOD__ . "($wgDBname): " . microtime(true) . ": COMPLETELY DONE!!!");
 
 		return true;
 	}
