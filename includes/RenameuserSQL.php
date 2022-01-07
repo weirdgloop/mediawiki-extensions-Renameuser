@@ -321,7 +321,7 @@ class RenameuserSQL {
 			if ( array_key_exists( $database, $jobs ) ) {
 				$count = count( $jobs[$database] );
 				if ( $count > 0 ) {
-					JobQueueGroup::singleton( $database )->push( $jobs[$database] );
+					MediaWikiServices::getInstance()->getJobQueueGroupFactory()->makeJobQueueGroup( $database )->push( $jobs[$database] );
 					$this->debug( "Queued $count jobs for {$this->old} to {$this->new}" );
 				}
 			}
