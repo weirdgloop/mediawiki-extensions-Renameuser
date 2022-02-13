@@ -95,6 +95,19 @@ class RenameUserEachWikiJob extends Job implements GenericParameterJob
 					]
 				]
 			],
+			'recentchanges' => [
+				[
+					'fields' => [
+						'rc_title' => $newTitle->getDBkey()
+					],
+					'where' => [
+						'rc_type' => RC_LOG,
+						'rc_log_type' => $logTypesOnUser,
+						'rc_namespace' => NS_USER,
+						'rc_title' => $oldTitle->getDBkey()
+					]
+				]
+			],
 			/* Extensions */
 			// AbuseFilter
 			'abuse_filter' => [

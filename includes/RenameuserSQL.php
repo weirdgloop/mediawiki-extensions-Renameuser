@@ -197,18 +197,6 @@ class RenameuserSQL {
 		// WGL change: Removed a bunch of code here, moved to RenameUserEachWikiJob.
 		$oldTitle = Title::makeTitle( NS_USER, $this->old );
 
-		$this->debug( "Updating recentchanges table for {$this->old} to {$this->new}" );
-		$dbw->update( 'recentchanges',
-			[ 'rc_title' => $newTitle->getDBkey() ],
-			[
-				'rc_type' => RC_LOG,
-				'rc_log_type' => $logTypesOnUser,
-				'rc_namespace' => NS_USER,
-				'rc_title' => $oldTitle->getDBkey()
-			],
-			__METHOD__
-		);
-
 		// Do immediate re-attribution table updates...
 		foreach ( $this->tables as $table => $fieldSet ) {
 			list( $nameCol, $userCol ) = $fieldSet;
