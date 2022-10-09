@@ -40,6 +40,7 @@ class RenameuserLogFormatter extends LogFormatter {
 
 		// Nice link to old user page
 		$title = Title::makeTitleSafe( NS_USER, $params[3] );
+		// @phan-suppress-next-line SecurityCheck-DoubleEscaped
 		$link = $this->myPageLink( $title, $params[3],
 			[ 'redirect' => 'no' ] );
 		// @phan-suppress-next-line SecurityCheck-XSS
@@ -47,6 +48,7 @@ class RenameuserLogFormatter extends LogFormatter {
 
 		// Nice link to new user page
 		$title = Title::makeTitleSafe( NS_USER, $params[4] );
+		// @phan-suppress-next-line SecurityCheck-DoubleEscaped
 		$link = $this->myPageLink( $title, $params[4] );
 		// @phan-suppress-next-line SecurityCheck-XSS
 		$params[4] = Message::rawParam( $link );
@@ -60,7 +62,8 @@ class RenameuserLogFormatter extends LogFormatter {
 	 * @param Title|null $title
 	 * @param string $text
 	 * @param array $query
-	 * @return string
+	 * @return string wikitext or html
+	 * @return-taint onlysafefor_html
 	 */
 	protected function myPageLink( ?Title $title, $text, $query = [] ) {
 		if ( !$this->plaintext ) {
