@@ -57,6 +57,12 @@ class RenameuserSQL {
 	 */
 	public $checkIfUserExists;
 
+	/** @var bool */
+	public $movePages;
+
+	/** @var bool */
+	public $suppressRedirects;
+
 	/**
 	 * User object of the user performing the rename, for logging purposes
 	 *
@@ -112,6 +118,8 @@ class RenameuserSQL {
 		$this->uid = $uid;
 		$this->renamer = $renamer;
 		$this->checkIfUserExists = true;
+		$this->movePages = false;
+		$this->suppressRedirects = false;
 
 		if ( isset( $options['checkIfUserExists'] ) ) {
 			$this->checkIfUserExists = $options['checkIfUserExists'];
@@ -123,6 +131,14 @@ class RenameuserSQL {
 
 		if ( isset( $options['reason'] ) ) {
 			$this->reason = $options['reason'];
+		}
+
+		if ( isset( $options['movepages'] ) ) {
+			$this->movePages = $options['movepages'];
+		}
+
+		if ( isset( $options['suppressredirects'] ) ) {
+			$this->suppressRedirects = $options['suppressredirects'];
 		}
 
 		$this->tables = []; // Immediate updates
@@ -143,7 +159,7 @@ class RenameuserSQL {
 	 * @return bool
 	 */
 	public function rename() {
-		global $wgUpdateRowsPerJob;
+		global $wgUpdateRowsPerJob, $wgLocalDatabases;
 
 		// Grab the user's edit count first, used in log entry
 		$contribs = User::newFromId( $this->uid )->getEditCount();
@@ -185,43 +201,8 @@ class RenameuserSQL {
 		// Purge user cache
 		$user->invalidateCache();
 
-		// Update ipblock list if this user has a block in there.
-		$dbw->update( 'ipblocks',
-			[ 'ipb_address' => $this->new ],
-			[ 'ipb_user' => $this->uid, 'ipb_address' => $this->old ],
-			__METHOD__
-		);
-		// Update this users block/rights log. Ideally, the logs would be historical,
-		// but it is really annoying when users have "clean" block logs by virtue of
-		// being renamed, which makes admin tasks more of a pain...
+		// WGL change: Removed a bunch of code here, moved to RenameUserEachWikiJob.
 		$oldTitle = Title::makeTitle( NS_USER, $this->old );
-		$newTitle = Title::makeTitle( NS_USER, $this->new );
-		$this->debug( "Updating logging table for {$this->old} to {$this->new}" );
-
-		// Exclude user renames per T200731
-		$logTypesOnUser = array_diff( SpecialLog::getLogTypesOnUser(), [ 'renameuser' ] );
-
-		$dbw->update( 'logging',
-			[ 'log_title' => $newTitle->getDBkey() ],
-			[
-				'log_type' => $logTypesOnUser,
-				'log_namespace' => NS_USER,
-				'log_title' => $oldTitle->getDBkey()
-			],
-			__METHOD__
-		);
-
-		$this->debug( "Updating recentchanges table for {$this->old} to {$this->new}" );
-		$dbw->update( 'recentchanges',
-			[ 'rc_title' => $newTitle->getDBkey() ],
-			[
-				'rc_type' => RC_LOG,
-				'rc_log_type' => $logTypesOnUser,
-				'rc_namespace' => NS_USER,
-				'rc_title' => $oldTitle->getDBkey()
-			],
-			__METHOD__
-		);
 
 		// Do immediate re-attribution table updates...
 		foreach ( $this->tables as $table => $fieldSet ) {
@@ -242,58 +223,78 @@ class RenameuserSQL {
 		// is not really FIFO, so we might end up with a bunch of edits
 		// randomly mixed between the two new names. Some sort of rename
 		// lock might be in order...
-		foreach ( $this->tablesJob as $table => $params ) {
-			$userTextC = $params[self::NAME_COL]; // some *_user_text column
-			$userIDC = $params[self::UID_COL]; // some *_user column
-			$timestampC = $params[self::TIME_COL]; // some *_timestamp column
 
-			$res = $dbw->select( $table,
-				[ $timestampC ],
-				[ $userTextC => $this->old, $userIDC => $this->uid ],
-				__METHOD__,
-				[ 'ORDER BY' => "$timestampC ASC" ]
-			);
+		// WGL change: Loop through all wiki databases and create the jobs
+		foreach ( $wgLocalDatabases as $database ) {
+			// Add the initial job for all wikis here.
+			$jobs[$database][] = Job::factory( 'RenameUserEachWikiJob', [
+				'oldname' => $this->old,
+				'newname' => $this->new,
+				'uid' => $this->uid,
+				'movepages' => $this->movePages,
+				'suppressredirects' => $this->suppressRedirects
+			] );
 
-			$jobParams = [];
-			$jobParams['table'] = $table;
-			$jobParams['column'] = $userTextC;
-			$jobParams['uidColumn'] = $userIDC;
-			$jobParams['timestampColumn'] = $timestampC;
-			$jobParams['oldname'] = $this->old;
-			$jobParams['newname'] = $this->new;
-			$jobParams['userID'] = $this->uid;
-			// Timestamp column data for index optimizations
-			$jobParams['minTimestamp'] = '0';
-			$jobParams['maxTimestamp'] = '0';
-			$jobParams['count'] = 0;
-			// Unique column for replica lag avoidance
-			if ( isset( $params['uniqueKey'] ) ) {
-				$jobParams['uniqueKey'] = $params['uniqueKey'];
-			}
+			foreach ( $this->tablesJob as $table => $params ) {
+				$userTextC = $params[self::NAME_COL]; // some *_user_text column
+				$userIDC = $params[self::UID_COL]; // some *_user column
+				$timestampC = $params[self::TIME_COL]; // some *_timestamp column
 
-			// Insert jobs into queue!
-			foreach ( $res as $row ) {
-				# Since the ORDER BY is ASC, set the min timestamp with first row
-				if ( $jobParams['count'] === 0 ) {
-					$jobParams['minTimestamp'] = $row->$timestampC;
+				$res = $dbw->select( $table,
+					[ $timestampC ],
+					[ $userTextC => $this->old, $userIDC => $this->uid ],
+					__METHOD__,
+					[ 'ORDER BY' => "$timestampC ASC" ]
+				);
+
+				$jobParams = [];
+				$jobParams['table'] = $table;
+				$jobParams['column'] = $userTextC;
+				$jobParams['uidColumn'] = $userIDC;
+				$jobParams['timestampColumn'] = $timestampC;
+				$jobParams['oldname'] = $this->old;
+				$jobParams['newname'] = $this->new;
+				$jobParams['userID'] = $this->uid;
+				// Timestamp column data for index optimizations
+				$jobParams['minTimestamp'] = '0';
+				$jobParams['maxTimestamp'] = '0';
+				$jobParams['count'] = 0;
+				// Unique column for replica lag avoidance
+				if ( isset( $params['uniqueKey'] ) ) {
+					$jobParams['uniqueKey'] = $params['uniqueKey'];
 				}
-				# Keep updating the last timestamp, so it should be correct
-				# when the last item is added.
-				$jobParams['maxTimestamp'] = $row->$timestampC;
-				# Update row counter
-				$jobParams['count']++;
-				# Once a job has $wgUpdateRowsPerJob rows, add it to the queue
-				if ( $jobParams['count'] >= $wgUpdateRowsPerJob ) {
-					$jobs[] = Job::factory( 'renameUser', $oldTitle, $jobParams );
-					$jobParams['minTimestamp'] = '0';
-					$jobParams['maxTimestamp'] = '0';
-					$jobParams['count'] = 0;
+
+				// Insert jobs into queue!
+				foreach ( $res as $row ) {
+					# Since the ORDER BY is ASC, set the min timestamp with first row
+					if ( $jobParams['count'] === 0 ) {
+						$jobParams['minTimestamp'] = $row->$timestampC;
+					}
+					# Keep updating the last timestamp, so it should be correct
+					# when the last item is added.
+					$jobParams['maxTimestamp'] = $row->$timestampC;
+					# Update row counter
+					$jobParams['count']++;
+					# Once a job has $wgUpdateRowsPerJob rows, add it to the queue
+					if ( $jobParams['count'] >= $wgUpdateRowsPerJob ) {
+						$jobs[$database][] = Job::factory( 'renameUser', $oldTitle, $jobParams );
+						$jobParams['minTimestamp'] = '0';
+						$jobParams['maxTimestamp'] = '0';
+						$jobParams['count'] = 0;
+					}
 				}
 			}
 			# If there are any job rows left, add it to the queue as one job
 			if ( $jobParams['count'] > 0 ) {
 				$jobs[] = Job::factory( 'renameUser', $oldTitle, $jobParams );
 			}
+		}
+
+		// If this user is renaming his/herself, make sure that MovePage::move()
+		// doesn't make a bunch of null move edits under the old name!
+		if ( $this->renamer->getId() === $this->uid ) {
+			$user->setName( $this->new );
+			$this->renamer->setName( $this->new );
 		}
 
 		// Log it!
@@ -309,16 +310,24 @@ class RenameuserSQL {
 		$logid = $logEntry->insert();
 		// Include the log_id in the jobs as a DB commit marker
 		foreach ( $jobs as $job ) {
-			$job->params['logId'] = $logid;
+			if ( isset( $job['params'] ) ) {
+				$job->params['logId'] = $logid;
+			}
 		}
 
 		// Insert any jobs as needed. If this fails, then an exception will be thrown and the
 		// DB transaction will be rolled back. If it succeeds but the DB commit fails, then the
 		// jobs will see that the transaction was not committed and will cancel themselves.
-		$count = count( $jobs );
-		if ( $count > 0 ) {
-			MediaWikiServices::getInstance()->getJobQueueGroupFactory()->makeJobQueueGroup()->push( $jobs );
-			$this->debug( "Queued $count jobs for {$this->old} to {$this->new}" );
+
+		// WGL change: Loop through all databases to do this
+		foreach ( $wgLocalDatabases as $database ) {
+			if ( array_key_exists( $database, $jobs ) ) {
+				$count = count( $jobs[$database] );
+				if ( $count > 0 ) {
+					MediaWikiServices::getInstance()->getJobQueueGroupFactory()->makeJobQueueGroup( $database )->push( $jobs[$database] );
+					$this->debug( "Queued $count jobs for {$this->old} to {$this->new}" );
+				}
+			}
 		}
 
 		// Commit the transaction

@@ -36,7 +36,8 @@
 		}
 	},
 	"JobClasses": {
-		"renameUser": "MediaWiki\\Extension\\Renameuser\\RenameUserJob"
+		"renameUser": "MediaWiki\\Extension\\Renameuser\\RenameUserJob",
+		"RenameUserEachWikiJob": "MediaWiki\\Extension\\Renameuser\\RenameUserEachWikiJob"
 	},
 	"GroupPermissions": {
 		"bureaucrat": {
