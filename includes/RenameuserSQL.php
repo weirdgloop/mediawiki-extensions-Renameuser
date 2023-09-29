@@ -286,7 +286,7 @@ class RenameuserSQL {
 			}
 			# If there are any job rows left, add it to the queue as one job
 			if ( $jobParams['count'] > 0 ) {
-				$jobs[] = Job::factory( 'renameUser', $oldTitle, $jobParams );
+				$jobs[$database][] = Job::factory( 'renameUser', $oldTitle, $jobParams );
 			}
 		}
 
